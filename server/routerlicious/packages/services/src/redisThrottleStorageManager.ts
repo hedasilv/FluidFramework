@@ -23,7 +23,7 @@ export class RedisThrottleStorageManager implements IThrottleStorageManager {
         private readonly expireAfterSeconds = 60 * 60 * 24,
         private readonly prefix = "throttle",
     ) {
-        this.setAsync = util.promisify(client.hmset.bind(client));
+        this.setAsync = util.promisify(client.hset.bind(client));
         this.getAsync = util.promisify(client.hgetall.bind(client));
         this.expire = util.promisify(client.expire.bind(client));
     }
@@ -33,11 +33,16 @@ export class RedisThrottleStorageManager implements IThrottleStorageManager {
         throttlingMetric: IThrottlingMetrics,
     ): Promise<void> {
         const key = this.getKey(id);
-        const result = await this.setAsync(key, throttlingMetric);
 
-        if (result !== "OK") {
-            return Promise.reject(result);
-        }
+        await this.setAsync(
+            key,
+            [].concat(...Object.entries(throttlingMetric)),
+            async (err: Error) => {
+                if (err) {
+                    return Promise.reject(err);
+                }
+            });
+
         await this.expire(key, this.expireAfterSeconds);
     }
 

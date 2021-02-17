@@ -19,18 +19,23 @@ export class ClientManager implements IClientManager {
         client: RedisClient,
         private readonly expireAfterSeconds = 60 * 60 * 24,
         private readonly prefix = "client") {
-        this.addAsync = util.promisify(client.hmset.bind(client));
+        this.addAsync = util.promisify(client.hset.bind(client));
         this.removeAsync = util.promisify(client.hdel.bind(client));
         this.findAllAsync = util.promisify(client.hgetall.bind(client));
         this.expire = util.promisify(client.expire.bind(client));
     }
 
     public async addClient(tenantId: string, documentId: string, clientId: string, details: IClient): Promise<void> {
-        const result = await this.addAsync(this.getKey(tenantId, documentId), clientId, JSON.stringify(details));
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-        return result !== "OK" ?
-            Promise.reject(result) :
-            this.expire(this.getKey(tenantId, documentId), this.expireAfterSeconds);
+        await this.addAsync(
+            this.getKey(tenantId, documentId),
+            clientId,
+            JSON.stringify(details),
+            async (err: Error) => {
+                if (err) {
+                    return Promise.reject(err);
+                }
+                this.expire(this.getKey(tenantId, documentId), this.expireAfterSeconds);
+            });
     }
 
     public async removeClient(tenantId: string, documentId: string, clientId: string): Promise<void> {
